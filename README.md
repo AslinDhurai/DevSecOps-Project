@@ -15,7 +15,6 @@
 
 # Deploy Netflix Clone on Cloud using Jenkins (DevSecOps Project)
 
-
 ## Video Tutorial
 
 Refer to the official project walkthrough/documentation for a full video-based setup.
