@@ -550,6 +550,5 @@ Reload/restart Prometheus after update.
 
 ## Notes
 
-- This README intentionally keeps the same cloud-first flow and command style.
 - If your setup differs (usernames, IPs, credentials IDs), replace placeholders accordingly.
 - You can also use `pipeline.txt` from this repository directly in Jenkins.
