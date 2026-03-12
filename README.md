@@ -679,22 +679,37 @@ argocd-server   NodePort   80:30007/TCP
 
 ---
 
-## 9. Open Security Group Port
+## 9. Open Security Group Ports
 
-To allow external access to ArgoCD:
+To allow external access to **ArgoCD UI** and **Node Exporter metrics**, update the Security Group rules for your EKS worker nodes.
 
 1. Go to **AWS Console → EC2 → Security Groups**
 2. Select the **EKS Worker Node Security Group**
-3. Add the following inbound rule:
+3. Add the following **Inbound Rules**:
+
+### ArgoCD Access
 
 ```
 Type: Custom TCP
 Port: 30007
 Source: 0.0.0.0/0
+Description: ArgoCD UI Access
 ```
 
-Save the rule.
+### Prometheus Node Exporter Metrics
 
+```
+Type: Custom TCP
+Port: 9100
+Source: 0.0.0.0/0
+Description: Node Exporter Metrics
+```
+
+4. Click **Save Rules**
+
+These rules allow:
+- **Port 30007** → Access the ArgoCD Web UI
+- **Port 9100** → Allow Prometheus to scrape Node Exporter metrics
 ---
 
 ## 10. Access ArgoCD UI
