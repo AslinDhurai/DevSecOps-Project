@@ -496,46 +496,265 @@ Import dashboard:
 
 ---
 
-## Phase 6: Kubernetes
+## Phase 6: Kubernetes Deployment and Monitoring
 
-### 1) Create Kubernetes Cluster with Nodegroups
+This phase sets up a Kubernetes cluster using **Amazon EKS**, configures access using **kubectl**, installs monitoring tools using **Helm**, and deploys applications using **ArgoCD GitOps**.
 
-Set up your cluster and node groups for scalable deployment.
+---
 
-### 2) Monitor Kubernetes with Prometheus
+### 1. Create EKS Cluster (AWS Console)
 
-Install Node Exporter in cluster using Helm:
+1. Go to **AWS Console → Amazon EKS**
+2. Click **Create Cluster**
+3. Provide the following configuration:
+
+Cluster Name: netflix-cluster  
+Kubernetes Version: Latest Stable  
+Cluster Service Role: Create new role or select existing EKS role  
+VPC: Default or existing VPC  
+Subnets: Select at least 2 subnets  
+Endpoint Access: Public  
+
+4. Click **Create**
+
+Cluster creation may take **10–15 minutes**.
+
+---
+
+### 2. Create Node Group
+
+After cluster creation:
+
+1. Open the created cluster
+2. Navigate to **Compute → Add Node Group**
+3. Configure:
+
+Node Group Name: netflix-workers  
+Instance Type: t3.medium  
+Desired Size: 2  
+Minimum Size: 1  
+Maximum Size: 3  
+
+4. Click **Create Node Group**
+
+Wait until the nodes are in **Ready state**.
+
+---
+
+### 3. Open AWS CloudShell
+
+Open **AWS CloudShell** from the AWS Console.
+
+CloudShell already includes the required tools:
+
+aws CLI  
+kubectl  
+eksctl  
+
+---
+
+### 4. Configure kubectl for the EKS Cluster
+
+Run the following command inside CloudShell to configure access to the cluster.
+
+```bash
+aws eks update-kubeconfig --region ap-south-1 --name netflix-cluster
+
+### Verify Cluster Connectivity
+
+Run the following command to verify that the EKS cluster nodes are connected.
+
+```bash
+kubectl get nodes
+```
+
+Expected output:
+
+```
+NAME                     STATUS   ROLES    AGE
+ip-xxx-xxx-xxx-xxx       Ready    <none>   2m
+```
+
+---
+
+## 5. Install Helm
+
+Helm is the **Kubernetes package manager** used to deploy applications and services.
+
+Install Helm:
+
+```bash
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+```
+
+Verify installation:
+
+```bash
+helm version
+```
+
+---
+
+## 6. Install Prometheus Node Exporter
+
+Node Exporter collects **infrastructure metrics from Kubernetes nodes**.
+
+### Add Helm Repository
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-kubectl create namespace prometheus-node-exporter
-helm install prometheus-node-exporter prometheus-community/prometheus-node-exporter --namespace prometheus-node-exporter
+helm repo update
 ```
 
-Add app scrape job in `prometheus.yml`:
+### Create Monitoring Namespace
 
-```yaml
-- job_name: 'Netflix'
-  metrics_path: '/metrics'
-  static_configs:
-    - targets: ['node1Ip:9100']
+```bash
+kubectl create namespace monitoring
 ```
 
-Reload/restart Prometheus after update.
+### Install Node Exporter
 
-### 3) Deploy with ArgoCD
+```bash
+helm install node-exporter prometheus-community/prometheus-node-exporter \
+--namespace monitoring
+```
 
-1. Install ArgoCD (EKS workshop guide can be followed).
-2. Configure your GitHub repo as source.
-3. Create ArgoCD app with:
-   - `name`
-   - `destination`
-   - `project`
-   - `source` (repo URL, revision, path)
-   - `syncPolicy` (auto sync, prune, self-heal)
-4. Access app:
-   - Ensure port `30007` is open in security group.
-   - Open `http://<node-ip>:30007`
+### Verify Deployment
+
+```bash
+kubectl get pods -n monitoring
+```
+
+---
+
+## 7. Install ArgoCD
+
+### Create ArgoCD Namespace
+
+```bash
+kubectl create namespace argocd
+```
+
+### Install ArgoCD Components
+
+```bash
+kubectl apply -n argocd \
+-f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+### Check ArgoCD Pods
+
+```bash
+kubectl get pods -n argocd
+```
+
+Wait until all pods show **Running** status.
+
+---
+
+## 8. Expose ArgoCD Server
+
+By default ArgoCD is **not externally accessible**.
+
+Expose it using **NodePort**.
+
+```bash
+kubectl patch svc argocd-server \
+-n argocd \
+-p '{"spec": {"type": "NodePort"}}'
+```
+
+Check exposed ports:
+
+```bash
+kubectl get svc argocd-server -n argocd
+```
+
+Example output:
+
+```
+NAME            TYPE       PORT(S)
+argocd-server   NodePort   80:30007/TCP
+```
+
+---
+
+## 9. Open Security Group Port
+
+To allow external access to ArgoCD:
+
+1. Go to **AWS Console → EC2 → Security Groups**
+2. Select the **EKS Worker Node Security Group**
+3. Add the following inbound rule:
+
+```
+Type: Custom TCP
+Port: 30007
+Source: 0.0.0.0/0
+```
+
+Save the rule.
+
+---
+
+## 10. Access ArgoCD UI
+
+Get the worker node public IP:
+
+```bash
+kubectl get nodes -o wide
+```
+
+Open the following URL in your browser:
+
+```
+http://<node-public-ip>:30007
+```
+
+---
+
+## 11. Retrieve ArgoCD Admin Password
+
+Run the following command:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret \
+-o jsonpath="{.data.password}" | base64 -d
+```
+
+Login credentials:
+
+```
+Username: admin
+Password: <output-from-command>
+```
+
+---
+
+## 12. Create ArgoCD Application
+
+1. Login to the **ArgoCD UI**
+2. Click **New App**
+3. Configure the application:
+
+```
+Application Name: netflix-app
+Project: default
+Repository URL: <your GitHub repository>
+Path: manifests
+Cluster: https://kubernetes.default.svc
+Namespace: default
+```
+
+Enable the following options:
+
+```
+Auto Sync
+Prune
+Self Heal
+```
+
+Click **Create** to deploy the application.
 
 ---
 
@@ -543,7 +762,7 @@ Reload/restart Prometheus after update.
 
 ### Cleanup AWS Resources
 
-- Terminate EC2 instances that are no longer required.
+- Terminate EC2 instances & EKS Cluster that are no longer required.
 
 ---
 
